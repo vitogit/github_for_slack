@@ -4,6 +4,17 @@ class SlackNotificationService
     'unlabeled' => :filter_unlabeled_action,
     'labeled' => :filter_on_hold_labeled_action
   }.freeze
+  EMOJI_HASH =  {
+    'JavaScript' => ':javascript:',
+    'TypeScript' => ':javascript:',
+    'Ruby' => ':ruby:',
+    'Java' => ':java:',
+    'Kotlin' => ':kotlin:',
+    'Swift' => ':swift:',
+    'React' => ':react:',
+    'React-Native' => ':react_native:',
+    'Angular' => ':angular:'
+  }.freeze
   ON_HOLD = 'ON HOLD'.freeze
   CHANNEL = '#code-review'.freeze
 
@@ -22,8 +33,9 @@ class SlackNotificationService
   private
 
   def notify_pull_request
-    pull_request_url = extra_params[:pull_request][:html_url]
-    client.chat_postMessage(channel: CHANNEL, text: pull_request_url)
+    username = extra_params[:pull_request][:user][:login]
+    icon_url = extra_params[:pull_request][:user][:avatar_url]
+    client.chat_postMessage(channel: CHANNEL, text: message, as_user: false, username: username, icon_url: icon_url )
   end
 
   def filter_unlabeled_action
@@ -65,4 +77,35 @@ class SlackNotificationService
   def on_hold?(label)
     label.downcase == ON_HOLD.downcase
   end
+
+  def message
+    pull_request_url = extra_params[:pull_request][:html_url]
+    language = extra_params[:repository][:language]
+    repo_name = extra_params[:repository][:name].downcase
+    slack_body = extract_slack_body extra_params[:pull_request][:body]
+    "#{pull_request_url} #{slack_body} #{language_emoji(language, repo_name)}"
+  end
+  
+  def extract_slack_body(body)
+    body = body.gsub("\r\n",' ').split('\slack ')[1] || ''
+    format_body body
+  end
+
+  # To show the notification @test it should be formatted like <@test>
+  # https://api.slack.com/docs/message-formatting
+  def format_body(body)
+    body.gsub(/([@#][A-Za-z0-9_]+)/, "<\\1>")
+  end
+
+  def language_emoji(language, repo_name)
+    if repo_name.include? 'react-native' or repo_name.include? 'reactnative'
+      language = 'React-Native'
+    elsif repo_name.include? 'react'
+      language = 'React'
+    elsif repo_name.include? 'angular'
+      language = 'Angular'
+    end
+    EMOJI_HASH.fetch language, "[#{language}]"
+  end
+
 end
